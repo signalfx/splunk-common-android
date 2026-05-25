@@ -6,5 +6,5 @@ on:
 
 jobs:
   validate_title_and_description:
-    uses: signalfx/splunk-common-android/.github/workflows/pr_title_description_validation_template.yaml@feature/actions
+    uses: signalfx/splunk-common-android/.github/workflows/pr_title_description_validation_template.yaml@develop
     secrets: inherit

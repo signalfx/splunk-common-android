@@ -5,5 +5,5 @@ on:
 
 jobs:
   validate:
-    uses: signalfx/splunk-common-android/.github/workflows/pr_validation_template.yaml@feature/actions
+    uses: signalfx/splunk-common-android/.github/workflows/pr_validation_template.yaml@develop
     secrets: inherit
