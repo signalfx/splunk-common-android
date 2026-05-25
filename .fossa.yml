@@ -1,0 +1,30 @@
+version: 3
+
+experimental:
+  gradle:
+    # The `configurations-only` option restricts analysis to the specified Gradle configurations.
+    # We intentionally omit `compileOnly` and test-related configurations because those
+    # dependencies are not packaged into the final artifact.
+    configurations-only:
+      - androidApis
+      - androidJdkImage
+      - coreLibraryDesugaring
+      - debugApi
+      - debugApiElements
+      - debugImplementation
+      - debugRuntimeClasspath
+      - debugRuntimeElements
+      - debugRuntimeOnly
+      - debugWearApp
+      - implementation
+      - releaseApi
+      - releaseApiElements
+      - releaseImplementation
+      - releaseRuntimeClasspath
+      - releaseRuntimeElements
+      - releaseRuntimeOnly
+      - releaseVariantReleaseApiPublication
+      - releaseVariantReleaseRuntimePublication
+      - releaseWearApp
+      - runtimeOnly
+      - wearApp
