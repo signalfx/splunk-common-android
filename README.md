@@ -5,7 +5,6 @@
 
 ## Overview
 This repository contains shared Android utilities, common components, and internal infrastructure used by the Splunk Android RUM Agent and Session Replay SDK. It provides reusable functionality that supports instrumentation, telemetry collection, configuration, and platform integrations across the Splunk Android Observability ecosystem.
-test
 
 ## Repository Structure
 
