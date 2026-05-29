@@ -1,0 +1,8 @@
+include ':common:encoder',
+		':common:http',
+		':common:id',
+		':common:job',
+		':common:logger',
+		':common:storage',
+		':common:utils'
+
