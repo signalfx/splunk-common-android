@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.splunk.android.common.storage.test">
+    <instrumentation
+        android:name="androidx.test.runner.AndroidJUnitRunner"
+        android:targetPackage="com.splunk.android.common.storage.test"
+        android:functionalTest="false"
+        android:handleProfiling="false" />
+</manifest>

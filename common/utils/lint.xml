@@ -1,0 +1,3 @@
+<lint>
+    <issue id="UseKtx" severity="ignore" />
+</lint>
