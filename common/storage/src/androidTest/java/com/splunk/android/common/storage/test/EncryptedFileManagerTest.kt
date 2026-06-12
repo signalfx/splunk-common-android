@@ -46,7 +46,7 @@ internal class EncryptedFileManagerTest {
 
     private val context: Context = ApplicationProvider.getApplicationContext()
 
-    private val keyManager: KeyManager = KeyManager.getInstance()
+    private val keyManager: KeyManager = KeyManager.instance
 
     private fun genKey(alias: String): SecretKey {
         return keyManager.getKey(alias)!!
