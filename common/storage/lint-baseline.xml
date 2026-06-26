@@ -7,7 +7,7 @@
         errorLine1="    get() = runOnAndroidAtLeast(Build.VERSION_CODES.LOLLIPOP) { noBackupFilesDir } ?: filesDir"
         errorLine2="                                                                ~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/splunk/android/common/storage/extensions/ContextExt.kt"
+            file="src/main/java/com/splunk/rum/common/storage/extensions/ContextExt.kt"
             line="9"
             column="65"/>
     </issue>
@@ -73,7 +73,7 @@
         errorLine1="        val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEY_STORE_PROVIDER)"
         errorLine2="                                        ~~~~~~~~~~~">
         <location
-            file="src/main/java/com/splunk/android/common/storage/encryption/KeyManager.kt"
+            file="src/main/java/com/splunk/rum/common/storage/encryption/KeyManager.kt"
             line="45"
             column="41"/>
     </issue>

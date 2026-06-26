@@ -1,1 +1,1 @@
--dontwarn com.splunk.android.common.logger.**
+-dontwarn com.splunk.rum.common.logger.**

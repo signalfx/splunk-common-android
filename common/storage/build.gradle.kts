@@ -20,8 +20,8 @@ apply<ConfigAndroidLibrary>()
 apply<ConfigPublish>()
 
 android {
-    namespace = "com.splunk.android.common.storage"
-    testNamespace = "com.splunk.android.common.storage.test"
+    namespace = "com.splunk.rum.common.storage"
+    testNamespace = "com.splunk.rum.common.storage.test"
 
     defaultConfig {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
