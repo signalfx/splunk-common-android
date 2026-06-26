@@ -1,4 +1,4 @@
--dontwarn com.splunk.android.common.utils.**
+-dontwarn com.splunk.rum.common.utils.**
 
 # ViewExt
 -keepnames class androidx.recyclerview.widget.RecyclerView

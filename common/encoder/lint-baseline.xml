@@ -7,7 +7,7 @@
         errorLine1="        var encoder = findProbableSafeEncoder(MediaFormat.MIMETYPE_VIDEO_AVC, profileType)"
         errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/splunk/android/common/encoder/Codec.kt"
+            file="src/main/java/com/splunk/rum/common/encoder/Codec.kt"
             line="51"
             column="47"/>
     </issue>
@@ -18,7 +18,7 @@
         errorLine1="            encoder = findFirstEncoder(MediaFormat.MIMETYPE_VIDEO_AVC)"
         errorLine2="                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/splunk/android/common/encoder/Codec.kt"
+            file="src/main/java/com/splunk/rum/common/encoder/Codec.kt"
             line="56"
             column="40"/>
     </issue>

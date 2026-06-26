@@ -19,7 +19,7 @@ ext {
 }
 
 android {
-	namespace = "com.splunk.android.common.utils"
+	namespace = "com.splunk.rum.common.utils"
 
     defaultConfig {
         multiDexEnabled = true

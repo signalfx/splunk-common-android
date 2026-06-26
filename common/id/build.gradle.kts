@@ -20,5 +20,5 @@ ext {
 }
 
 android {
-    namespace = "com.splunk.android.common.id"
+    namespace = "com.splunk.rum.common.id"
 }
