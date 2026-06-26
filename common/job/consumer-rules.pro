@@ -1,1 +1,1 @@
--dontwarn com.splunk.android.common.job.**
+-dontwarn com.splunk.rum.common.job.**

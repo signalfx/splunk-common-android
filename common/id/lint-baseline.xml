@@ -7,7 +7,7 @@
         errorLine1="    private val DEFAULT_NUMBER_GENERATOR = SecureRandom()"
         errorLine2="                                           ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/splunk/android/common/id/NanoId.kt"
+            file="src/main/java/com/splunk/rum/common/id/NanoId.kt"
             line="11"
             column="44"/>
     </issue>

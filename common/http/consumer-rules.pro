@@ -1,1 +1,1 @@
--dontwarn com.splunk.android.common.http.**
+-dontwarn com.splunk.rum.common.http.**

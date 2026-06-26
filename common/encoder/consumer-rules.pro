@@ -1,1 +1,1 @@
--dontwarn com.splunk.android.common.encoder.**
+-dontwarn com.splunk.rum.common.encoder.**

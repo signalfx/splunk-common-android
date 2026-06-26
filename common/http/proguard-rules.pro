@@ -1,3 +1,3 @@
--repackageclasses 'com.splunk.android.common.http'
+-repackageclasses 'com.splunk.rum.common.http'
 
 -dontwarn java.lang.invoke.StringConcatFactory

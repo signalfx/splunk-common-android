@@ -20,7 +20,7 @@ ext {
 }
 
 android {
-    namespace = "com.splunk.android.common.encoder"
+    namespace = "com.splunk.rum.common.encoder"
 }
 
 dependencies {

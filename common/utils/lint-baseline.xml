@@ -18,7 +18,7 @@
         errorLine1="    getValue(name, value, resolveRefs)"
         errorLine2="    ~~~~~~~~">
         <location
-            file="src/main/java/com/splunk/android/common/utils/extensions/ResourcesExt.kt"
+            file="src/main/java/com/splunk/rum/common/utils/extensions/ResourcesExt.kt"
             line="8"
             column="5"/>
     </issue>
@@ -29,7 +29,7 @@
         errorLine1="            resources.getValue(name, value, false)"
         errorLine2="                      ~~~~~~~~">
         <location
-            file="src/main/java/com/splunk/android/common/utils/extensions/ViewExt.kt"
+            file="src/main/java/com/splunk/rum/common/utils/extensions/ViewExt.kt"
             line="161"
             column="23"/>
     </issue>

@@ -19,7 +19,7 @@ ext {
 }
 
 android {
-    namespace = "com.splunk.android.common.http"
+    namespace = "com.splunk.rum.common.http"
 }
 
 dependencies {

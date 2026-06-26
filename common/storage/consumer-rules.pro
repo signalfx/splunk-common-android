@@ -1,1 +1,1 @@
--dontwarn com.splunk.android.common.storage.**
+-dontwarn com.splunk.rum.common.storage.**
