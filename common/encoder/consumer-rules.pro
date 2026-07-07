@@ -1,0 +1,1 @@
+-dontwarn com.splunk.rum.common.encoder.**
