@@ -1,0 +1,18 @@
+name: PR Title and Description Validation template
+
+on:
+  workflow_call:
+
+jobs:
+  validate_pr_title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Validate PR Title
+        uses: signalfx/splunk-common-android/.github/actions/validate-pr-title@develop
+  validate_gai_usage_disclosure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Validate GAI Usage Disclosure
+        uses: signalfx/splunk-common-android/.github/actions/validate-gai-usage-disclosure@develop
