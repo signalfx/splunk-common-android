@@ -1,7 +1,7 @@
-include ':common:encoder',
-        ':common:http',
-        ':common:id',
-        ':common:job',
-        ':common:logger',
-        ':common:storage',
-        ':common:utils'
+include ':encoder',
+        ':http',
+        ':id',
+        ':job',
+        ':logger',
+        ':storage',
+        ':utils'
