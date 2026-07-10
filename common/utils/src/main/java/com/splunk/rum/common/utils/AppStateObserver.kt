@@ -36,7 +36,11 @@ import java.lang.ref.WeakReference
 
 // MARK Required Proguard rules
 
-class AppStateObserver {
+object AppStateObserver {
+
+    private const val TAG = "AppStateObserver"
+
+    private val FRAGMENT_ACTIVITY_CLASS = "androidx.fragment.app.FragmentActivity".toClass()
 
     private val choreographer = Choreographer.getInstance()
 
@@ -181,11 +185,5 @@ class AppStateObserver {
 
         fun onViewTransitionStarted() {}
         fun onViewTransitionEnded() {}
-    }
-
-    private companion object {
-        const val TAG = "AppStateObserver"
-
-        val FRAGMENT_ACTIVITY_CLASS = "androidx.fragment.app.FragmentActivity".toClass()
     }
 }
