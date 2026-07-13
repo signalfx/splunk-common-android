@@ -37,7 +37,6 @@ object RootViewObserver {
     private const val TAG = "RootViewObserver"
 
     private val choreographer = Choreographer.getInstance()
-    private val appStateObserver = AppStateObserver()
 
     private var windowManager: Any? = null
     private var viewsField: Field? = null
@@ -69,8 +68,8 @@ object RootViewObserver {
             return
         }
 
-        appStateObserver.listener = appStateObserverListener
-        appStateObserver.attach(application)
+        AppStateObserver.listener = appStateObserverListener
+        AppStateObserver.attach(application)
 
         injectObserverIfNeeded()
     }
