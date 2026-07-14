@@ -32,7 +32,7 @@ dependencies {
 	compileOnly(Dependencies.Android.recycler)
 	compileOnly(Dependencies.Android.material) // Legacy
 
-    implementation(project(":common:logger"))
+    implementation(project(":logger"))
 
     testImplementation(Dependencies.Test.junit)
 	testImplementation(Dependencies.Test.robolectric)

@@ -24,7 +24,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":common:logger"))
-    implementation(project(":common:utils"))
-    implementation(project(":common:storage"))
+    implementation(project(":logger"))
+    implementation(project(":utils"))
+    implementation(project(":storage"))
 }

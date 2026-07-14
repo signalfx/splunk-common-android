@@ -8,6 +8,7 @@ import utils.versionProperty
 plugins {
     id("com.android.library")
     id("kotlin-android")
+    id("kotlin-parcelize")
 }
 
 apply<ConfigAndroidLibrary>()
@@ -19,11 +20,9 @@ ext {
 }
 
 android {
-    namespace = "com.splunk.rum.common.http"
+    namespace = "com.splunk.rum.common.encoder"
 }
 
 dependencies {
-    compileOnly(Dependencies.Android.annotation)
-
-    implementation(project(":common:utils"))
+    implementation(project(":logger"))
 }
