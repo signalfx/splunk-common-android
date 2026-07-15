@@ -68,7 +68,7 @@ object RootViewObserver {
             return
         }
 
-        AppStateObserver.listener = appStateObserverListener
+        AppStateObserver.listeners += appStateObserverListener
         AppStateObserver.attach(application)
 
         injectObserverIfNeeded()
