@@ -30,6 +30,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import com.splunk.rum.common.logger.Logger
 import com.splunk.rum.common.utils.adapters.ActivityLifecycleCallbacksAdapter
+import com.splunk.rum.common.utils.extensions.forEachFast
 import com.splunk.rum.common.utils.extensions.getStatic
 import com.splunk.rum.common.utils.extensions.toClass
 import java.lang.ref.WeakReference
@@ -48,7 +49,7 @@ object AppStateObserver {
     private var runningActivities = 0
     private var aliveActivities = 0
 
-    var listener: Listener? = null
+    val listeners: MutableList<Listener> = mutableListOf()
 
     fun attach(application: Application) {
         if (this.application != null)
@@ -93,9 +94,9 @@ object AppStateObserver {
                 isViewTransitionRunning = isRunning
 
                 if (isRunning)
-                    listener?.onViewTransitionStarted()
+                    listeners.forEachFast { it.onViewTransitionStarted() }
                 else
-                    listener?.onViewTransitionEnded()
+                    listeners.forEachFast { it.onViewTransitionEnded() }
             }
         }
     }
@@ -104,7 +105,7 @@ object AppStateObserver {
 
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
             if (++aliveActivities == 1)
-                listener?.onAppStarted()
+                listeners.forEachFast { it.onAppStarted() }
 
             if (FRAGMENT_ACTIVITY_CLASS?.isInstance(activity) == true) {
                 activity as FragmentActivity
@@ -114,17 +115,17 @@ object AppStateObserver {
 
         override fun onActivityStarted(activity: Activity) {
             if (++runningActivities == 1)
-                listener?.onAppForegrounded()
+                listeners.forEachFast { it.onAppForegrounded() }
         }
 
         override fun onActivityStopped(activity: Activity) {
             if (--runningActivities == 0)
-                listener?.onAppBackgrounded()
+                listeners.forEachFast { it.onAppBackgrounded() }
         }
 
         override fun onActivityDestroyed(activity: Activity) {
             if (--aliveActivities == 0)
-                listener?.onAppClosed()
+                listeners.forEachFast { it.onAppClosed() }
 
             if (FRAGMENT_ACTIVITY_CLASS?.isInstance(activity) == true) {
                 activity as FragmentActivity
@@ -160,13 +161,13 @@ object AppStateObserver {
                         fragmentsInTransaction += fragment
 
                         if (fragmentsInTransaction.size == 1)
-                            listener?.onFragmentTransactionStarted()
+                            listeners.forEachFast { it.onFragmentTransactionStarted() }
                     }
                     FragmentTransactionObserver.Event.END -> {
                         fragmentsInTransaction -= fragment
 
                         if (fragmentsInTransaction.isEmpty())
-                            listener?.onFragmentTransactionEnded()
+                            listeners.forEachFast { it.onFragmentTransactionEnded() }
                     }
                 }
             }
