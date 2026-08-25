@@ -21,6 +21,11 @@ import com.splunk.rum.common.storage.extensions.createNewFileOnPath
 import com.splunk.rum.common.storage.extensions.toFile
 import com.splunk.rum.common.storage.filemanager.IFileManager
 
+/**
+ * File-backed cache whose writes are not atomic: the configured [IFileManager] writes directly to
+ * the destination. It therefore does not guarantee recovery from process death during a write or
+ * coordination between multiple cache instances or Android processes.
+ */
 open class FilePermanentCache(
     private val fileManager: IFileManager
 ) : IPermanentCache {
