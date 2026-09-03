@@ -28,7 +28,7 @@ object Dependencies {
     }
 
     object Android {
-        private const val annotationVersion = "1.6.0"
+        private const val annotationVersion = "1.5.0"
         private const val recyclerVersion = "1.2.1"
         private const val materialVersion = "1.9.0"
 
