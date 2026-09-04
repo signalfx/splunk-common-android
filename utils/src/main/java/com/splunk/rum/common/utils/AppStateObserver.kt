@@ -25,6 +25,7 @@ import android.transition.TransitionManager
 import android.util.ArrayMap
 import android.view.Choreographer
 import android.view.ViewGroup
+import androidx.annotation.MainThread
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
@@ -43,7 +44,7 @@ object AppStateObserver {
 
     private val FRAGMENT_ACTIVITY_CLASS = "androidx.fragment.app.FragmentActivity".toClass()
 
-    private val choreographer = Choreographer.getInstance()
+    private val choreographer = SafeChoreographer()
 
     private var application: Application? = null
     private var runningActivities = 0
@@ -51,6 +52,7 @@ object AppStateObserver {
 
     val listeners: MutableList<Listener> = mutableListOf()
 
+    @MainThread
     fun attach(application: Application) {
         if (this.application != null)
             return
@@ -61,6 +63,7 @@ object AppStateObserver {
         this.application = application
     }
 
+    @MainThread
     fun detach() {
         application?.unregisterActivityLifecycleCallbacks(activityLifecycleCallback)
         choreographer.removeFrameCallback(frameCallback)
