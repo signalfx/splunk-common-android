@@ -1,3 +1,21 @@
+pluginManagement {
+    apply from: 'gradle/repositories.gradle'
+
+    repositories commonRepositories
+    repositories {
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    apply from: 'gradle/repositories.gradle'
+
+    repositories {
+        mavenLocal()
+    }
+    repositories commonRepositories
+}
+
 include ':encoder',
         ':http',
         ':id',

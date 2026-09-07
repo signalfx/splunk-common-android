@@ -1,28 +1,9 @@
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-
-    dependencies {
-        classpath(Dependencies.gradle)
-        classpath(Dependencies.kotlin)
-        classpath(Dependencies.jacoco)
-    }
-}
-
 plugins {
     id(Dependencies.NexusPublish.id) version Dependencies.NexusPublish.version
 }
 
 allprojects {
     apply<plugins.ConfigKtLint>()
-
-    repositories {
-        mavenLocal()
-        google()
-        mavenCentral()
-    }
 
     afterEvaluate {
         if (!isReleaseBuild()) {
