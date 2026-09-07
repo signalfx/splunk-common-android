@@ -29,6 +29,7 @@ import com.splunk.rum.common.utils.extensions.findField
 import com.splunk.rum.common.utils.extensions.forEachFast
 import com.splunk.rum.common.utils.extensions.get
 import com.splunk.rum.common.utils.extensions.set
+import com.splunk.rum.common.utils.extensions.toClass
 import java.lang.reflect.Field
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -55,7 +56,7 @@ object RootViewObserver {
             return
 
         try {
-            val windowManagerClass = Class.forName("android.view.WindowManagerGlobal")
+            val windowManagerClass = "android.view.WindowManagerGlobal".toClass() ?: return
             val getInstanceMethod = windowManagerClass.getMethod("getInstance")
             val windowManager = getInstanceMethod.invoke(null) ?: return
 
