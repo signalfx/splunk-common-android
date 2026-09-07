@@ -22,6 +22,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Choreographer
 import android.view.View
+import androidx.annotation.MainThread
 import com.splunk.rum.common.logger.Logger
 import com.splunk.rum.common.utils.extensions.DifferencesConsumer
 import com.splunk.rum.common.utils.extensions.emitDifferences
@@ -37,7 +38,7 @@ object RootViewObserver {
 
     private const val TAG = "RootViewObserver"
 
-    private val choreographer = Choreographer.getInstance()
+    private val choreographer = SafeChoreographer()
 
     private var windowManager: Any? = null
     private var viewsField: Field? = null
@@ -50,6 +51,7 @@ object RootViewObserver {
     val views: List<View>
         get() = rootViewsObserver?.filterNotNull() ?: emptyList()
 
+    @MainThread
     @SuppressLint("PrivateApi")
     fun attach(application: Application) {
         if (windowManager != null)

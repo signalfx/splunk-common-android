@@ -30,9 +30,11 @@ import android.view.Window
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.PopupWindow
+import androidx.annotation.MainThread
 import com.splunk.rum.common.logger.Logger
 import com.splunk.rum.common.utils.R
 import com.splunk.rum.common.utils.RootViewObserver
+import com.splunk.rum.common.utils.SafeChoreographer
 import com.splunk.rum.common.utils.adapters.ActivityLifecycleCallbacksAdapter
 import com.splunk.rum.common.utils.extensions.activity
 import com.splunk.rum.common.utils.extensions.findCallbackField
@@ -65,7 +67,7 @@ object WindowCallbackManager { // FIXME Activity dialog on Android 6
         CREATED, STARTED, RESUMED, PAUSED, STOPPED, DESTROYED
     }
 
-    private val choreographer = Choreographer.getInstance()
+    private val choreographer = SafeChoreographer()
     private val windowCallbacksCache = ArrayList<Window.Callback>()
 
     private var isAttached = false
@@ -74,6 +76,7 @@ object WindowCallbackManager { // FIXME Activity dialog on Android 6
 
     val callbacks: MutableList<Callback> = ArrayList()
 
+    @MainThread
     fun attach(application: Application) {
         if (isAttached)
             return
