@@ -16,9 +16,12 @@ limitations under the License.
 
 package com.splunk.rum.common.utils.extensions
 
+import com.splunk.rum.common.utils.Barrier
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.reflect.KClass
+
+private val CLASS_LOADER: ClassLoader = Barrier::class.java.classLoader ?: ClassLoader.getSystemClassLoader()
 
 fun String.toKClass(): KClass<*>? {
     return toClass()?.kotlin
@@ -34,8 +37,8 @@ fun String.toJSONArray(): JSONArray {
 
 fun String.toClass(): Class<*>? {
     return try {
-        Class.forName(this)
-    } catch (_: Exception) {
+        Class.forName(this, false, CLASS_LOADER)
+    } catch (_: Throwable) {
         null
     }
 }
