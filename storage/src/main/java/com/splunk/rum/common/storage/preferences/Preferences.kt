@@ -21,21 +21,44 @@ import com.splunk.rum.common.storage.cache.ISimplePermanentCache
 import com.splunk.rum.common.utils.Lock
 import com.splunk.rum.common.utils.extensions.safeSubmit
 import com.splunk.rum.common.utils.thread.NamedThreadFactory
-import org.json.JSONException
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import kotlin.collections.set
 
-class Preferences(private val permanentCache: ISimplePermanentCache) : IPreferences {
+class Preferences private constructor(
+    private val createPermanentCache: () -> ISimplePermanentCache
+) : IPreferences {
+
+    /**
+     * Kept for existing consumers, including Session Replay and JobIdStorage.
+     * The cache is still initialized by the Preferences worker, as it is for the factory form.
+     */
+    constructor(permanentCache: ISimplePermanentCache) : this({ permanentCache })
 
     private val map = hashMapOf<String, Value>()
     private val lockLoad = Lock()
-    private val lockSave = Lock()
-    private val scheduler = ScheduledThreadPoolExecutor(1, NamedThreadFactory("Preferences"))
+
+    // lockLoad is a load barrier, not a mutual-exclusion lock. Any() gives synchronized() the
+    // actual monitor needed to serialize async apply() and synchronous commit() writes.
+    private val lockSave = Any()
+    private val scheduler = ScheduledThreadPoolExecutor(1, NamedThreadFactory("SplunkPreferences"))
+
+    /** Incremented under [map] whenever a mutation needs to be persisted. */
+    private var mutationVersion = 0L
+
+    /**
+     * Created and assigned by the Preferences worker so cache construction and disk I/O do not
+     * happen on the caller's thread.
+     */
+    @Volatile
+    private var permanentCache: ISimplePermanentCache? = null
 
     @Volatile
-    private var lastScheduledTask: ScheduledFuture<*>? = null
+    private var lastScheduledSaveTask: ScheduledFuture<*>? = null
+
+    /** Identifies the current scheduled write so an invalidated save task cannot touch newer work. */
+    private var currentScheduledSaveToken = 0L
 
     init {
         loadFromPermanentCache()
@@ -65,20 +88,29 @@ class Preferences(private val permanentCache: ISimplePermanentCache) : IPreferen
         return putValue(key, StringMapValue(value))
     }
 
+    /**
+     * Writes the current in-memory values before returning. This is intentionally synchronous for
+     * callers that must persist state before a process can terminate, such as crash handling.
+     */
     override fun commit() {
         lockLoad.waitToUnlock()
 
+        val cache = permanentCache ?: return
+
+        // A pending debounced write is no longer needed. If it is already running, lockSave below
+        // makes commit wait for it and then writes the latest map state itself.
         synchronized(scheduler) {
-            lastScheduledTask?.cancel(true)
-            lastScheduledTask = null
+            lastScheduledSaveTask?.cancel(false)
+            lastScheduledSaveTask = null
+            currentScheduledSaveToken++
         }
 
-        val jsonString = synchronized(map) {
-            serializeFromMap(map)
+        synchronized(lockSave) {
+            val jsonString = synchronized(map) {
+                serializeFromMap(map)
+            }
+            cache.writeBytes(jsonString.toByteArray())
         }
-
-        lockSave.waitToUnlock()
-        permanentCache.writeBytes(jsonString.toByteArray())
     }
 
     override fun remove(key: String): IPreferences {
@@ -86,6 +118,7 @@ class Preferences(private val permanentCache: ISimplePermanentCache) : IPreferen
 
         synchronized(map) {
             map -= key
+            mutationVersion++
         }
 
         apply()
@@ -98,6 +131,7 @@ class Preferences(private val permanentCache: ISimplePermanentCache) : IPreferen
 
         synchronized(map) {
             map.clear()
+            mutationVersion++
         }
 
         apply()
@@ -130,49 +164,100 @@ class Preferences(private val permanentCache: ISimplePermanentCache) : IPreferen
     private fun loadFromPermanentCache() {
         lockLoad.lock()
 
-        scheduler.safeSubmit {
-            val jsonString = permanentCache.readBytes()?.toString(Charsets.UTF_8)
-
-            if (jsonString?.isEmpty() != false) {
-                lockLoad.unlock()
-                return@safeSubmit
-            }
-
-            synchronized(map) {
+        try {
+            scheduler.safeSubmit {
                 try {
-                    deserializeToMap(jsonString, map)
-                } catch (e: JSONException) {
-                    // If cache gets corrupted because of sudden crash it needs to be cleared
-                    commit()
-                    Logger.w(TAG, "deserializeAndFillMap(): Failed to deserialize a String due to ${e.message}!")
+                    val cache = createPermanentCache()
+                    permanentCache = cache
+                    val jsonString = cache.readBytes()?.toString(Charsets.UTF_8)
+
+                    if (jsonString?.isEmpty() != false) {
+                        return@safeSubmit
+                    }
+
+                    var isCorrupt = false
+                    val loadedMap = try {
+                        // Parse off the shared map so malformed input cannot leave a partial state visible.
+                        deserializeToMap(jsonString)
+                    } catch (e: Exception) {
+                        isCorrupt = true
+                        Logger.w(TAG, "deserializeAndFillMap(): Failed to deserialize preferences: ${e.message}")
+                        emptyMap()
+                    }
+
+                    synchronized(map) {
+                        map.clear()
+                        map.putAll(loadedMap)
+                    }
+
+                    if (isCorrupt) {
+                        // Clear corrupted data directly while the load barrier is held; normal writes
+                        // can continue after the worker publishes the empty map.
+                        cache.writeBytes("{}".toByteArray())
+                    }
+                } catch (e: Exception) {
+                    Logger.w(TAG, "loadFromPermanentCache(): Failed to initialize preferences: ${e.message}")
+                } finally {
+                    // Every caller waits on this barrier; it must be released for all worker outcomes.
+                    lockLoad.unlock()
                 }
             }
-
+        } catch (e: Throwable) {
             lockLoad.unlock()
+            Logger.w(TAG, "loadFromPermanentCache(): Failed to schedule preferences load: ${e.message}")
         }
     }
 
     private fun apply() {
-        lockSave.waitToUnlock()
-
         synchronized(scheduler) {
-            if (lastScheduledTask?.isDone != false)
-                lastScheduledTask = scheduler.schedule(::performApplyLogic, DEBOUNCE_TIME, TimeUnit.MILLISECONDS)
+            if (lastScheduledSaveTask?.isDone == false) return
+
+            scheduleApplyLocked()
         }
     }
 
-    private fun performApplyLogic() {
+    /** Must be called while holding the scheduler monitor. */
+    private fun scheduleApplyLocked() {
+        val saveToken = ++currentScheduledSaveToken
+        lastScheduledSaveTask = scheduler.schedule(
+            { performApplyLogic(saveToken) },
+            DEBOUNCE_TIME,
+            TimeUnit.MILLISECONDS,
+        )
+    }
+
+    private fun performApplyLogic(saveToken: Long) {
         lockLoad.waitToUnlock()
 
-        val jsonString = synchronized(map) {
-            serializeFromMap(map)
-        }
+        val cache = permanentCache ?: return
+        var snapshotVersion: Long? = null
 
-        lockSave.lock()
         try {
-            permanentCache.writeBytes(jsonString.toByteArray())
+            synchronized(lockSave) {
+                // Snapshot and write while holding the same lock as commit(), so a debounced write
+                // cannot serialize an older map and overwrite a newer synchronous commit.
+                val snapshot = synchronized(map) {
+                    serializeFromMap(map) to mutationVersion
+                }
+                snapshotVersion = snapshot.second
+                cache.writeBytes(snapshot.first.toByteArray())
+            }
         } finally {
-            lockSave.unlock()
+            synchronized(scheduler) {
+                // A commit may have invalidated this task while it was running. Do not clear or
+                // replace a newer task that was scheduled after that commit.
+                if (saveToken != currentScheduledSaveToken) return@synchronized
+
+                lastScheduledSaveTask = null
+
+                val mapChangedDuringWrite = snapshotVersion?.let { version ->
+                    synchronized(map) { mutationVersion != version }
+                } == true
+
+                if (mapChangedDuringWrite) {
+                    scheduleApplyLocked()
+                }
+            }
         }
     }
 
@@ -181,6 +266,7 @@ class Preferences(private val permanentCache: ISimplePermanentCache) : IPreferen
 
         synchronized(map) {
             map[key] = value
+            mutationVersion++
         }
 
         apply()
@@ -202,11 +288,14 @@ class Preferences(private val permanentCache: ISimplePermanentCache) : IPreferen
             is StringMapValue -> wrappedValue.value
         }
 
-        return value as? T ?: throw IllegalArgumentException("Expected a value of type ${T::class}, but got ${value::class}!")
+        return value as? T
     }
 
-    private companion object {
-        const val TAG = "Preferences"
-        const val DEBOUNCE_TIME = 500L // 500ms
+    companion object {
+        private const val TAG = "Preferences"
+        private const val DEBOUNCE_TIME = 500L // 500ms
+
+        @JvmStatic
+        fun create(factory: () -> ISimplePermanentCache): Preferences = Preferences(factory)
     }
 }
