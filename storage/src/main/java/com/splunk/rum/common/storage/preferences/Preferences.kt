@@ -39,6 +39,17 @@ class Preferences private constructor(
     private val map = hashMapOf<String, Value>()
     private val lockLoad = Lock()
 
+    /**
+     * Whether the asynchronous initial load has completed.
+     *
+     * This is a non-blocking observation of the existing load barrier. A completed load is ready
+     * even when the preferences are empty because the file is missing, corrupt, or could not be
+     * read.
+     */
+    @Volatile
+    var isReady: Boolean = false
+        private set
+
     // lockLoad is a load barrier, not a mutual-exclusion lock. Any() gives synchronized() the
     // actual monitor needed to serialize async apply() and synchronous commit() writes.
     private val lockSave = Any()
@@ -200,10 +211,12 @@ class Preferences private constructor(
                 } finally {
                     // Every caller waits on this barrier; it must be released for all worker outcomes.
                     lockLoad.unlock()
+                    isReady = true
                 }
             }
         } catch (e: Throwable) {
             lockLoad.unlock()
+            isReady = true
             Logger.w(TAG, "loadFromPermanentCache(): Failed to schedule preferences load: ${e.message}")
         }
     }

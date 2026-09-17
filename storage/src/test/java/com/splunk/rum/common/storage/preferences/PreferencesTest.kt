@@ -251,6 +251,7 @@ internal class PreferencesTest {
         val preferences = Preferences(FailingReadCache())
 
         Assert.assertNull(preferences.getString("key"))
+        Assert.assertTrue(preferences.isReady)
     }
 
     @Test
@@ -259,6 +260,7 @@ internal class PreferencesTest {
 
         Assert.assertNull(preferences.getString("key"))
         Assert.assertEquals(0, preferences.size())
+        Assert.assertTrue(preferences.isReady)
     }
 
     @Test
@@ -269,6 +271,7 @@ internal class PreferencesTest {
 
         Assert.assertNull(preferences.getString("key"))
         Assert.assertEquals("{}", cache.readBytes().toString(Charsets.UTF_8))
+        Assert.assertTrue(preferences.isReady)
     }
 
     @Test
@@ -285,6 +288,7 @@ internal class PreferencesTest {
         Assert.assertNull(preferences.getString("valid"))
         Assert.assertNull(preferences.getString("invalid"))
         Assert.assertEquals("{}", cache.readBytes().toString(Charsets.UTF_8))
+        Assert.assertTrue(preferences.isReady)
     }
 
     @Test
