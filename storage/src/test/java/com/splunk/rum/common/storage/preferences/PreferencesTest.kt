@@ -199,6 +199,19 @@ internal class PreferencesTest {
     }
 
     @Test
+    fun `readiness is false during load and true after load completes`() {
+        val cache = BlockingReadCache(ByteArray(0))
+        val preferences = Preferences(cache)
+
+        Assert.assertTrue(cache.readStarted.await(5, TimeUnit.SECONDS))
+        Assert.assertFalse(preferences.isReady)
+
+        cache.allowRead.countDown()
+
+        Assert.assertTrue(awaitReady(preferences))
+    }
+
+    @Test
     fun `commit waits for load before writing`() {
         val cache = BlockingReadCache(
             "{\"existing\":{\"type\":\"String\",\"value\":\"value\"}}".toByteArray(),
@@ -461,6 +474,14 @@ internal class PreferencesTest {
 
     private fun thenIsEmpty() {
         Assert.assertEquals("{}", testCache.readBytes().toString(Charsets.UTF_8))
+    }
+
+    private fun awaitReady(preferences: Preferences): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (!preferences.isReady && System.nanoTime() < deadline) {
+            Thread.yield()
+        }
+        return preferences.isReady
     }
 
     private class TestSimplePermanentCache : ISimplePermanentCache {
