@@ -47,6 +47,15 @@ class Preferences private constructor(
     /** Incremented under [map] whenever a mutation needs to be persisted. */
     private var mutationVersion = 0L
 
+    /** Set under [map] once the loaded values and [pendingMutations] are published to [map]. */
+    private var isLoaded = false
+
+    /** Last mutation per key made before the load completes, guarded by [map]. Null marks a removal. */
+    private val pendingMutations = hashMapOf<String, Value?>()
+
+    /** Set under [map] when [clear] is called before the load completes. */
+    private var isClearedBeforeLoad = false
+
     /**
      * Created and assigned by the Preferences worker so cache construction and disk I/O do not
      * happen on the caller's thread.
@@ -65,27 +74,27 @@ class Preferences private constructor(
     }
 
     override fun putString(key: String, value: String): IPreferences {
-        return putValue(key, StringValue(value))
+        return setValue(key, StringValue(value))
     }
 
     override fun putInt(key: String, value: Int): IPreferences {
-        return putValue(key, IntValue(value))
+        return setValue(key, IntValue(value))
     }
 
     override fun putLong(key: String, value: Long): IPreferences {
-        return putValue(key, LongValue(value))
+        return setValue(key, LongValue(value))
     }
 
     override fun putFloat(key: String, value: Float): IPreferences {
-        return putValue(key, FloatValue(value))
+        return setValue(key, FloatValue(value))
     }
 
     override fun putBoolean(key: String, value: Boolean): IPreferences {
-        return putValue(key, BooleanValue(value))
+        return setValue(key, BooleanValue(value))
     }
 
     override fun putStringMap(key: String, value: Map<String, String>): IPreferences {
-        return putValue(key, StringMapValue(value))
+        return setValue(key, StringMapValue(value))
     }
 
     /**
@@ -113,28 +122,23 @@ class Preferences private constructor(
         }
     }
 
-    override fun remove(key: String): IPreferences {
-        lockLoad.waitToUnlock()
-
-        synchronized(map) {
-            map -= key
-            mutationVersion++
-        }
-
-        apply()
-
-        return this
-    }
+    override fun remove(key: String): IPreferences = setValue(key, null)
 
     override fun clear(): IPreferences {
-        lockLoad.waitToUnlock()
-
-        synchronized(map) {
-            map.clear()
-            mutationVersion++
+        val isAppliedToMap = synchronized(map) {
+            if (isLoaded) {
+                map.clear()
+                mutationVersion++
+            } else {
+                pendingMutations.clear()
+                isClearedBeforeLoad = true
+            }
+            isLoaded
         }
 
-        apply()
+        if (isAppliedToMap) {
+            apply()
+        }
 
         return this
     }
@@ -151,10 +155,7 @@ class Preferences private constructor(
 
     override fun getStringMap(key: String): Map<String, String>? = getValue(key)
 
-    override operator fun contains(key: String): Boolean {
-        lockLoad.waitToUnlock()
-        return synchronized(map) { map.contains(key) }
-    }
+    override operator fun contains(key: String): Boolean = findValue(key) != null
 
     override fun size(): Int {
         lockLoad.waitToUnlock()
@@ -166,45 +167,69 @@ class Preferences private constructor(
 
         try {
             scheduler.safeSubmit {
+                var loadedMap = emptyMap<String, Value>()
+
                 try {
                     val cache = createPermanentCache()
                     permanentCache = cache
                     val jsonString = cache.readBytes()?.toString(Charsets.UTF_8)
 
-                    if (jsonString?.isEmpty() != false) {
-                        return@safeSubmit
-                    }
-
-                    var isCorrupt = false
-                    val loadedMap = try {
-                        // Parse off the shared map so malformed input cannot leave a partial state visible.
-                        deserializeToMap(jsonString)
-                    } catch (e: Exception) {
-                        isCorrupt = true
-                        Logger.w(TAG, "deserializeAndFillMap(): Failed to deserialize preferences: ${e.message}")
-                        emptyMap()
-                    }
-
-                    synchronized(map) {
-                        map.clear()
-                        map.putAll(loadedMap)
-                    }
-
-                    if (isCorrupt) {
-                        // Clear corrupted data directly while the load barrier is held; normal writes
-                        // can continue after the worker publishes the empty map.
-                        cache.writeBytes("{}".toByteArray())
+                    if (!jsonString.isNullOrEmpty()) {
+                        try {
+                            // Parse off the shared map so malformed input cannot leave a partial state visible.
+                            loadedMap = deserializeToMap(jsonString)
+                        } catch (e: Exception) {
+                            Logger.w(TAG, "deserializeAndFillMap(): Failed to deserialize preferences: ${e.message}")
+                            // Clear corrupted data directly while the load barrier is held; mutations are
+                            // persisted by apply() after the worker publishes them.
+                            cache.writeBytes("{}".toByteArray())
+                        }
                     }
                 } catch (e: Exception) {
                     Logger.w(TAG, "loadFromPermanentCache(): Failed to initialize preferences: ${e.message}")
                 } finally {
-                    // Every caller waits on this barrier; it must be released for all worker outcomes.
-                    lockLoad.unlock()
+                    // Readers wait on this barrier; it must be released for all worker outcomes.
+                    completeLoad(loadedMap)
                 }
             }
         } catch (e: Throwable) {
-            lockLoad.unlock()
+            completeLoad(emptyMap())
             Logger.w(TAG, "loadFromPermanentCache(): Failed to schedule preferences load: ${e.message}")
+        }
+    }
+
+    /** Publishes [loadedMap] with the mutations made before the load, then releases the load barrier. */
+    private fun completeLoad(loadedMap: Map<String, Value>) {
+        val hasPendingMutations = try {
+            synchronized(map) {
+                if (!isClearedBeforeLoad) {
+                    map.putAll(loadedMap)
+                }
+
+                for ((key, value) in pendingMutations) {
+                    if (value == null) {
+                        map -= key
+                    } else {
+                        map[key] = value
+                    }
+                }
+
+                val hasMutations = isClearedBeforeLoad || pendingMutations.isNotEmpty()
+                if (hasMutations) {
+                    mutationVersion++
+                }
+
+                pendingMutations.clear()
+                isClearedBeforeLoad = false
+                isLoaded = true
+                hasMutations
+            }
+        } finally {
+            lockLoad.unlock()
+        }
+
+        if (hasPendingMutations) {
+            apply()
         }
     }
 
@@ -261,23 +286,43 @@ class Preferences private constructor(
         }
     }
 
-    private fun putValue(key: String, value: Value): IPreferences {
-        lockLoad.waitToUnlock()
-
-        synchronized(map) {
-            map[key] = value
-            mutationVersion++
+    /** Removes [key] when [value] is null. */
+    private fun setValue(key: String, value: Value?): IPreferences {
+        val isAppliedToMap = synchronized(map) {
+            if (isLoaded) {
+                if (value == null) {
+                    map -= key
+                } else {
+                    map[key] = value
+                }
+                mutationVersion++
+            } else {
+                pendingMutations[key] = value
+            }
+            isLoaded
         }
 
-        apply()
+        if (isAppliedToMap) {
+            apply()
+        }
 
         return this
     }
 
-    private inline fun <reified T> getValue(key: String): T? {
+    private fun findValue(key: String): Value? {
+        synchronized(map) {
+            if (isLoaded) return map[key]
+            if (key in pendingMutations) return pendingMutations[key]
+            if (isClearedBeforeLoad) return null
+        }
+
         lockLoad.waitToUnlock()
 
-        val wrappedValue = synchronized(map) { map[key] } ?: return null
+        return synchronized(map) { map[key] }
+    }
+
+    private inline fun <reified T> getValue(key: String): T? {
+        val wrappedValue = findValue(key) ?: return null
 
         val value: Any = when (wrappedValue) {
             is StringValue -> wrappedValue.value
