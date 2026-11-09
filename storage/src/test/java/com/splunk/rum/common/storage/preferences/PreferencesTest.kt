@@ -221,29 +221,189 @@ internal class PreferencesTest {
     }
 
     @Test
-    fun `mutations wait for load and preserve loaded values`() {
-        val cache = BlockingReadCache(
-            "{\"existing\":{\"type\":\"String\",\"value\":\"value\"}}".toByteArray(),
+    fun `mutations before load do not wait and are applied over loaded values`() {
+        val cache = TestSimplePermanentCache()
+        cache.writeBytes(
+            (
+                "{\"existing\":{\"type\":\"String\",\"value\":\"old\"}," +
+                    "\"removed\":{\"type\":\"String\",\"value\":\"old\"}}"
+                ).toByteArray(),
         )
-        val preferences = Preferences(cache)
-        val mutationFinished = CountDownLatch(1)
+        val allowLoad = CountDownLatch(1)
+        val preferences = delayedLoadPreferences(allowLoad) { cache }
 
-        Thread {
+        withoutWaitingForLoad {
+            preferences.putString("new", "first")
+            preferences.remove("new")
             preferences.putString("new", "value")
-            mutationFinished.countDown()
-        }.start()
+            preferences.remove("removed")
+        }
 
-        Assert.assertTrue(cache.readStarted.await(5, TimeUnit.SECONDS))
-        Assert.assertFalse(mutationFinished.await(100, TimeUnit.MILLISECONDS))
-
-        cache.allowRead.countDown()
-
-        Assert.assertTrue(mutationFinished.await(5, TimeUnit.SECONDS))
+        allowLoad.countDown()
         preferences.commit()
 
         val persisted = cache.readBytes().toString(Charsets.UTF_8).toJSONObject()
-        Assert.assertEquals("value", persisted.getJSONObject("existing").getString("value"))
+        Assert.assertEquals("old", persisted.getJSONObject("existing").getString("value"))
         Assert.assertEquals("value", persisted.getJSONObject("new").getString("value"))
+        Assert.assertFalse(persisted.has("removed"))
+    }
+
+    @Test
+    fun `reads of keys mutated before load do not wait`() {
+        val cache = TestSimplePermanentCache()
+        cache.writeBytes(
+            (
+                "{\"existing\":{\"type\":\"String\",\"value\":\"old\"}," +
+                    "\"removed\":{\"type\":\"String\",\"value\":\"old\"}}"
+                ).toByteArray(),
+        )
+        val allowLoad = CountDownLatch(1)
+        val preferences = delayedLoadPreferences(allowLoad) { cache }
+
+        withoutWaitingForLoad {
+            preferences.putString("existing", "new")
+            preferences.remove("removed")
+
+            Assert.assertEquals("new", preferences.getString("existing"))
+            Assert.assertTrue(preferences.contains("existing"))
+            Assert.assertNull(preferences.getString("removed"))
+            Assert.assertFalse(preferences.contains("removed"))
+        }
+
+        allowLoad.countDown()
+
+        Assert.assertEquals("new", preferences.getString("existing"))
+        Assert.assertNull(preferences.getString("removed"))
+    }
+
+    @Test
+    fun `reads of other keys still wait for load`() {
+        val cache = TestSimplePermanentCache()
+        cache.writeBytes("{\"existing\":{\"type\":\"String\",\"value\":\"old\"}}".toByteArray())
+        val allowLoad = CountDownLatch(1)
+        val preferences = delayedLoadPreferences(allowLoad) { cache }
+        val readResult = AtomicReference<String>()
+        val readFinished = CountDownLatch(1)
+
+        withoutWaitingForLoad { preferences.putString("new", "value") }
+        Thread {
+            readResult.set(preferences.getString("existing"))
+            readFinished.countDown()
+        }.start()
+
+        Assert.assertFalse(readFinished.await(100, TimeUnit.MILLISECONDS))
+
+        allowLoad.countDown()
+
+        Assert.assertTrue(readFinished.await(5, TimeUnit.SECONDS))
+        Assert.assertEquals("old", readResult.get())
+        Assert.assertEquals(2, preferences.size())
+    }
+
+    @Test
+    fun `clear before load hides loaded values without waiting`() {
+        val cache = TestSimplePermanentCache()
+        cache.writeBytes("{\"existing\":{\"type\":\"String\",\"value\":\"old\"}}".toByteArray())
+        val allowLoad = CountDownLatch(1)
+        val preferences = delayedLoadPreferences(allowLoad) { cache }
+
+        withoutWaitingForLoad {
+            preferences.putString("beforeClear", "value")
+            preferences.clear()
+            preferences.putString("afterClear", "value")
+
+            Assert.assertNull(preferences.getString("existing"))
+            Assert.assertFalse(preferences.contains("beforeClear"))
+            Assert.assertEquals("value", preferences.getString("afterClear"))
+        }
+
+        allowLoad.countDown()
+        preferences.commit()
+
+        Assert.assertEquals(1, preferences.size())
+        val persisted = cache.readBytes().toString(Charsets.UTF_8).toJSONObject()
+        Assert.assertEquals(1, persisted.length())
+        Assert.assertEquals("value", persisted.getJSONObject("afterClear").getString("value"))
+    }
+
+    @Test
+    fun `mutations before load are persisted without commit`() {
+        val cache = CountingWriteCache("{\"existing\":{\"type\":\"String\",\"value\":\"old\"}}".toByteArray())
+        val allowLoad = CountDownLatch(1)
+        val preferences = delayedLoadPreferences(allowLoad) { cache }
+
+        withoutWaitingForLoad { preferences.putString("new", "value") }
+        allowLoad.countDown()
+
+        Assert.assertTrue(cache.firstWriteCompleted.await(5, TimeUnit.SECONDS))
+        val persisted = cache.readBytes().toString(Charsets.UTF_8).toJSONObject()
+        Assert.assertEquals("old", persisted.getJSONObject("existing").getString("value"))
+        Assert.assertEquals("value", persisted.getJSONObject("new").getString("value"))
+    }
+
+    @Test
+    fun `mutations before load are kept when the preferences file is empty`() {
+        assertMutationBeforeLoadIsKept { TestSimplePermanentCache() }
+    }
+
+    @Test
+    fun `mutations before load are kept when the preferences file is missing`() {
+        assertMutationBeforeLoadIsKept { MissingReadCache() }
+    }
+
+    @Test
+    fun `mutations before load are kept when reading preferences fails`() {
+        assertMutationBeforeLoadIsKept { FailingReadCache() }
+    }
+
+    @Test
+    fun `mutations before load are kept when cache creation fails`() {
+        assertMutationBeforeLoadIsKept { throw IllegalStateException("cache creation failed") }
+    }
+
+    @Test
+    fun `mutations before load replace corrupt preferences`() {
+        val cache = TestSimplePermanentCache()
+        cache.writeBytes("not-json".toByteArray())
+
+        val preferences = assertMutationBeforeLoadIsKept { cache }
+        preferences.commit()
+
+        val persisted = cache.readBytes().toString(Charsets.UTF_8).toJSONObject()
+        Assert.assertEquals("value", persisted.getJSONObject("key").getString("value"))
+    }
+
+    @Test
+    fun `concurrent mutations before load do not wait and are all retained`() {
+        val allowLoad = CountDownLatch(1)
+        val preferences = delayedLoadPreferences(allowLoad) { TestSimplePermanentCache() }
+        val start = CountDownLatch(1)
+        val finished = CountDownLatch(8)
+        val failure = AtomicReference<Throwable>()
+
+        repeat(8) { index ->
+            Thread {
+                try {
+                    start.await()
+                    preferences.putInt("key-$index", index)
+                } catch (throwable: Throwable) {
+                    failure.set(throwable)
+                } finally {
+                    finished.countDown()
+                }
+            }.start()
+        }
+
+        start.countDown()
+        Assert.assertTrue(finished.await(2, TimeUnit.SECONDS))
+        Assert.assertNull(failure.get())
+
+        allowLoad.countDown()
+
+        Assert.assertEquals(8, preferences.size())
+        repeat(8) { index ->
+            Assert.assertEquals(index, preferences.getInt("key-$index"))
+        }
     }
 
     @Test
@@ -398,6 +558,43 @@ internal class PreferencesTest {
         Assert.assertNull(preferences.getInt("key"))
     }
 
+    private fun assertMutationBeforeLoadIsKept(createCache: () -> ISimplePermanentCache): Preferences {
+        val allowLoad = CountDownLatch(1)
+        val preferences = delayedLoadPreferences(allowLoad, createCache)
+
+        withoutWaitingForLoad { preferences.putString("key", "value") }
+        allowLoad.countDown()
+
+        Assert.assertEquals(1, preferences.size())
+        Assert.assertEquals("value", preferences.getString("key"))
+        return preferences
+    }
+
+    private fun delayedLoadPreferences(
+        allowLoad: CountDownLatch,
+        createCache: () -> ISimplePermanentCache,
+    ): Preferences = Preferences.create {
+        allowLoad.await(5, TimeUnit.SECONDS)
+        createCache()
+    }
+
+    private fun withoutWaitingForLoad(block: () -> Unit) {
+        val failure = AtomicReference<Throwable>()
+        val thread = Thread {
+            try {
+                block()
+            } catch (throwable: Throwable) {
+                failure.set(throwable)
+            }
+        }
+
+        thread.start()
+        thread.join(TimeUnit.SECONDS.toMillis(2))
+
+        Assert.assertFalse("The call waited for the preferences load", thread.isAlive)
+        failure.get()?.let { throw it }
+    }
+
     private fun whenWrittenToPreferences() {
         preferences.putString("key for String", "String value")
         preferences.putString("key for String to be deleted", "String value to be deleted")
@@ -536,9 +733,9 @@ internal class PreferencesTest {
         }
     }
 
-    private class CountingWriteCache : ISimplePermanentCache {
+    private class CountingWriteCache(initialBytes: ByteArray = ByteArray(0)) : ISimplePermanentCache {
         @Volatile
-        private var bytes = ByteArray(0)
+        private var bytes = initialBytes
 
         val firstWriteCompleted = CountDownLatch(1)
         val secondWriteCompleted = CountDownLatch(1)

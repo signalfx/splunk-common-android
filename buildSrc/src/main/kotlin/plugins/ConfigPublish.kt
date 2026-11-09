@@ -6,10 +6,8 @@ import org.gradle.api.Project
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.publish.maven.tasks.AbstractPublishToMaven
-import org.gradle.jvm.tasks.Jar
 import org.gradle.kotlin.dsl.apply
 import org.gradle.kotlin.dsl.configure
-import org.gradle.kotlin.dsl.creating
 import org.gradle.kotlin.dsl.get
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.getValue
@@ -26,11 +24,15 @@ class ConfigPublish : Plugin<Project> by local plugin {
     apply(plugin = "maven-publish")
     apply(plugin = "signing")
 
-    afterEvaluate {
-        val sourcesJar by tasks.creating(Jar::class) {
-            archiveClassifier.set("sources")
+    android {
+        publishing {
+            singleVariant("release") {
+                withSourcesJar()
+            }
         }
+    }
 
+    afterEvaluate {
         val androidJavadocsJar by tasks.registering(org.gradle.api.tasks.bundling.Jar::class) {
             from("$rootDir/README.md")
             archiveClassifier.set("javadoc")
@@ -62,7 +64,6 @@ class ConfigPublish : Plugin<Project> by local plugin {
                         baseVersion
                     }
 
-                    artifact(sourcesJar)
                     artifact(androidJavadocsJar)
                     pom.withXml { asNode().addSplunkInfo() }
                 }
