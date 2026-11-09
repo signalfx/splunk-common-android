@@ -15,5 +15,5 @@ object Configurations {
     }
 
     const val sdkVersionCode = 3
-    const val sdkVersionName = "1.0.3"
+    const val sdkVersionName = "1.0.4"
 }
