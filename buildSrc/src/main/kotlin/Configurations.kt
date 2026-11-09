@@ -14,6 +14,6 @@ object Configurations {
         val targetCompatibility = JavaVersion.VERSION_1_8
     }
 
-    const val sdkVersionCode = 3
+    const val sdkVersionCode = 4
     const val sdkVersionName = "1.0.4"
 }
