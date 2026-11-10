@@ -86,6 +86,51 @@ internal class AppStateObserverTest {
     }
 
     @Test
+    fun `equal Activities are tracked as separate instances`() {
+        var foregroundCalls = 0
+        var backgroundCalls = 0
+        var closedCalls = 0
+        val listener = object : AppStateObserver.Listener {
+            override fun onAppForegrounded() { foregroundCalls++ }
+            override fun onAppBackgrounded() { backgroundCalls++ }
+            override fun onAppClosed() { closedCalls++ }
+        }
+        AppStateObserver.listeners.add(listener)
+        try {
+            AppStateObserver.attach(application)
+            val first = Robolectric.buildActivity(EqualActivity::class.java).create().start().resume()
+            val second = Robolectric.buildActivity(EqualActivity::class.java).create().start().resume()
+
+            assertTrue(first.get() !== second.get())
+            assertEquals(first.get(), second.get())
+            assertEquals(1, foregroundCalls)
+
+            first.pause().stop().destroy()
+            assertTrue(AppStateObserver.hasStartedActivity)
+            assertEquals(0, backgroundCalls)
+            assertEquals(0, closedCalls)
+
+            second.pause().stop().destroy()
+            assertFalse(AppStateObserver.hasStartedActivity)
+            assertEquals(1, backgroundCalls)
+            assertEquals(1, closedCalls)
+        } finally {
+            AppStateObserver.listeners.remove(listener)
+        }
+    }
+
+    @Test
+    fun `changing an Activity hash code does not prevent removal`() {
+        AppStateObserver.attach(application)
+        val activity = Robolectric.buildActivity(MutableHashActivity::class.java).create().start().resume()
+
+        activity.get().hash = 42
+        activity.pause().stop().destroy()
+
+        assertFalse(AppStateObserver.hasStartedActivity)
+    }
+
+    @Test
     fun `query returns false while detached`() {
         AppStateObserver.attach(application)
         val activity = Robolectric.buildActivity(Activity::class.java).create().start().resume()
@@ -138,5 +183,16 @@ internal class AppStateObserverTest {
 
     class HeadlessService : Service() {
         override fun onBind(intent: Intent?): IBinder? = null
+    }
+
+    class EqualActivity : Activity() {
+        override fun equals(other: Any?): Boolean = other is EqualActivity
+        override fun hashCode(): Int = 1
+    }
+
+    class MutableHashActivity : Activity() {
+        var hash = 1
+        override fun equals(other: Any?): Boolean = this === other
+        override fun hashCode(): Int = hash
     }
 }

@@ -35,8 +35,6 @@ import com.splunk.rum.common.utils.extensions.forEachFast
 import com.splunk.rum.common.utils.extensions.getStatic
 import com.splunk.rum.common.utils.extensions.toClass
 import java.lang.ref.WeakReference
-import java.util.Collections
-import java.util.WeakHashMap
 
 // MARK Required Proguard rules
 
@@ -53,8 +51,8 @@ object AppStateObserver {
 
     @Volatile
     private var runningActivities = 0
-    private val startedActivities = Collections.newSetFromMap(WeakHashMap<Activity, Boolean>())
-    private val aliveActivities = Collections.newSetFromMap(WeakHashMap<Activity, Boolean>())
+    private val startedActivities = WeakActivitySet()
+    private val aliveActivities = WeakActivitySet()
 
     val listeners: MutableList<Listener> = mutableListOf()
 
@@ -212,5 +210,37 @@ object AppStateObserver {
 
         fun onViewTransitionStarted() {}
         fun onViewTransitionEnded() {}
+    }
+
+    /** Tracks Activity instances without keeping them alive or using their equals/hashCode. */
+    private class WeakActivitySet {
+        private val activities = mutableListOf<WeakReference<Activity>>()
+
+        val size: Int
+            get() {
+                activities.removeAll { it.get() == null }
+                return activities.size
+            }
+
+        fun isEmpty(): Boolean = size == 0
+
+        fun clear() = activities.clear()
+
+        fun add(activity: Activity): Boolean {
+            activities.removeAll { it.get() == null }
+            if (activities.any { it.get() === activity }) return false
+            activities.add(WeakReference(activity))
+            return true
+        }
+
+        fun remove(activity: Activity): Boolean {
+            var removed = false
+            activities.removeAll {
+                val existing = it.get()
+                if (existing === activity) removed = true
+                existing == null || existing === activity
+            }
+            return removed
+        }
     }
 }
