@@ -46,11 +46,23 @@ object AppStateObserver {
 
     private val choreographer = SafeChoreographer()
 
+    @Volatile
     private var application: Application? = null
+
+    @Volatile
     private var runningActivities = 0
-    private var aliveActivities = 0
+    private val startedActivities = WeakActivitySet()
+    private val aliveActivities = WeakActivitySet()
 
     val listeners: MutableList<Listener> = mutableListOf()
+
+    /**
+     * Whether an Activity observed by this instance has started. Reading this does not notify listeners.
+     * If the SDK's lifecycle provider was removed and this observer attaches after the Activity
+     * started, the value remains false until the next observed start.
+     */
+    val hasStartedActivity: Boolean
+        get() = application != null && runningActivities > 0
 
     @MainThread
     fun attach(application: Application) {
@@ -69,6 +81,9 @@ object AppStateObserver {
         choreographer.removeFrameCallback(frameCallback)
 
         application = null
+        startedActivities.clear()
+        aliveActivities.clear()
+        runningActivities = 0
     }
 
     private val frameCallback = object : Choreographer.FrameCallback {
@@ -107,30 +122,36 @@ object AppStateObserver {
     private val activityLifecycleCallback = object : ActivityLifecycleCallbacksAdapter {
 
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-            if (++aliveActivities == 1)
+            val isNewActivity = aliveActivities.add(activity)
+            if (isNewActivity && aliveActivities.size == 1)
                 listeners.forEachFast { it.onAppStarted() }
 
-            if (FRAGMENT_ACTIVITY_CLASS?.isInstance(activity) == true) {
+            if (isNewActivity && FRAGMENT_ACTIVITY_CLASS?.isInstance(activity) == true) {
                 activity as FragmentActivity
                 activity.supportFragmentManager.registerFragmentLifecycleCallbacks(fragmentLifecycleCallbacks, true)
             }
         }
 
         override fun onActivityStarted(activity: Activity) {
-            if (++runningActivities == 1)
+            if (!startedActivities.add(activity)) return
+            runningActivities = startedActivities.size
+            if (runningActivities == 1)
                 listeners.forEachFast { it.onAppForegrounded() }
         }
 
         override fun onActivityStopped(activity: Activity) {
-            if (--runningActivities == 0)
+            if (!startedActivities.remove(activity)) return
+            runningActivities = startedActivities.size
+            if (runningActivities == 0)
                 listeners.forEachFast { it.onAppBackgrounded() }
         }
 
         override fun onActivityDestroyed(activity: Activity) {
-            if (--aliveActivities == 0)
+            val wasObserved = aliveActivities.remove(activity)
+            if (wasObserved && aliveActivities.isEmpty())
                 listeners.forEachFast { it.onAppClosed() }
 
-            if (FRAGMENT_ACTIVITY_CLASS?.isInstance(activity) == true) {
+            if (wasObserved && FRAGMENT_ACTIVITY_CLASS?.isInstance(activity) == true) {
                 activity as FragmentActivity
                 activity.supportFragmentManager.unregisterFragmentLifecycleCallbacks(fragmentLifecycleCallbacks)
             }
@@ -189,5 +210,37 @@ object AppStateObserver {
 
         fun onViewTransitionStarted() {}
         fun onViewTransitionEnded() {}
+    }
+
+    /** Tracks Activity instances without keeping them alive or using their equals/hashCode. */
+    private class WeakActivitySet {
+        private val activities = mutableListOf<WeakReference<Activity>>()
+
+        val size: Int
+            get() {
+                activities.removeAll { it.get() == null }
+                return activities.size
+            }
+
+        fun isEmpty(): Boolean = size == 0
+
+        fun clear() = activities.clear()
+
+        fun add(activity: Activity): Boolean {
+            activities.removeAll { it.get() == null }
+            if (activities.any { it.get() === activity }) return false
+            activities.add(WeakReference(activity))
+            return true
+        }
+
+        fun remove(activity: Activity): Boolean {
+            var removed = false
+            activities.removeAll {
+                val existing = it.get()
+                if (existing === activity) removed = true
+                existing == null || existing === activity
+            }
+            return removed
+        }
     }
 }
